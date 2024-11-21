@@ -16,7 +16,8 @@ public class ArcadeCar: MonoBehaviour {
 
     const float wheelWidth = 0.085f;
 
-    private bool isAutoDriving = true; // AutoDrive
+    private bool isAutoDriving = false;
+    private bool isFreeze = false;
 
     private Queue<Car> movementQueue = new Queue<Car>();
     private bool isExecuting = false;
@@ -274,7 +275,7 @@ public class ArcadeCar: MonoBehaviour {
         rb = GetComponent<Rigidbody>();
         rb.centerOfMass = centerOfMass;
 
-        WebGLInput.captureAllKeyboardInput = false;
+        //WebGLInput.captureAllKeyboardInput = false;
 
         //if (isAutoDriving) {
         //    autoDriveStartTime = Time.time;
