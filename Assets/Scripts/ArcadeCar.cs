@@ -12,6 +12,7 @@ public class ArcadeCar: MonoBehaviour {
 
     const int WHEEL_LEFT_INDEX = 0;
     const int WHEEL_RIGHT_INDEX = 1;
+
     int count = 0;
 
     const float wheelWidth = 0.085f;
@@ -25,6 +26,9 @@ public class ArcadeCar: MonoBehaviour {
 
     private float autoDriveStartTime;
     private float autoDriveDuration = 30f;
+
+    private float leftSpeed;
+    private float rightSpeed;
 
     public Transform sensorLeft;
     public Transform sensorCenter;
@@ -56,6 +60,7 @@ public class ArcadeCar: MonoBehaviour {
 
     public float maxAcceleration = 80.0f;
 
+    private bool IsTrackingLine = false;
 
     public Vector3 _centerOfMass;
 
@@ -70,6 +75,8 @@ public class ArcadeCar: MonoBehaviour {
     void Start() {
         carRb = GetComponent<Rigidbody>();
         carRb.centerOfMass = _centerOfMass;
+        WebGLInput.captureAllKeyboardInput = false;
+
     }
 
     void Update() {
@@ -77,19 +84,71 @@ public class ArcadeCar: MonoBehaviour {
 
     void FixedUpdate() {
         CheckSensors();
-        SetWheelSpeeds(1000f);
+        SetWheelSpeeds();
     }
 
-    public void SetWheelSpeeds(float leftSpeed) {
-        // Set the speed for the left wheel (wheel left index)
+    public void SetWheelSpeeds() {
         wheels[WHEEL_LEFT_INDEX].wheelCollider.motorTorque = leftSpeed;
 
-        // Calculate the speed for the right wheel to make the car turn right
-        // To make the car turn, the right wheel should have less speed than the left wheel
-        //rightWheelSpeed = leftSpeed * 0.5f;  // Adjust this factor to get desired turning behavior
+        wheels[WHEEL_RIGHT_INDEX].wheelCollider.motorTorque = rightSpeed;
+    }
 
-        // Set the speed for the right wheel (wheel right index)
-        //wheels[WHEEL_RIGHT_INDEX].wheelCollider.motorTorque = rightWheelSpeed;
+    public void SetWheelsSpeed(float left, float right) {
+        leftSpeed = left;
+
+        rightSpeed = right;
+    }
+
+    public void MoveCar(string dataFrontEnd) {
+        Debug.Log("Received command: " + dataFrontEnd); // Xác nhận lệnh từ WebGL
+
+        string[] parameters = dataFrontEnd.Split(',');
+        if (parameters.Length == 3) {
+            float leftSpeed = float.Parse(parameters[0]);
+            float rightSpeed = float.Parse(parameters[1]);
+            float duration = float.Parse(parameters[2]);
+            if (duration == 0) {
+                SetWheelsSpeed(leftSpeed, rightSpeed);
+            } else {
+                AddQueue(leftSpeed, rightSpeed, duration);
+            }
+        } else {
+            Debug.LogWarning("Invalid command format");
+        }
+
+    }
+    public void AddQueue(float leftSpeed, float rightSpeed, float duration) {
+        movementQueue.Enqueue(new Car(leftSpeed, rightSpeed, duration));
+        StartExecution();
+    }
+
+    private void AddQueueLineTracking(float leftSpeed, float rightSpeed, float duration) {
+        movementQueue.Enqueue(new Car(leftSpeed, rightSpeed, 0f));
+        ExecuteQueueLineStacking();
+    }
+
+    private void ExecuteQueueLineStacking() {
+        while (movementQueue.Count > 0) {
+            Car command = movementQueue.Dequeue();
+            SetWheelsSpeed(command.LeftWheel, command.RightWheel);
+        }
+    }
+
+    public void StartExecution() {
+        if (!isExecuting && movementQueue.Count > 0) {
+            StartCoroutine(ExecuteMovementQueue());
+        }
+    }
+
+    private IEnumerator ExecuteMovementQueue() {
+        isExecuting = true;
+
+        while (movementQueue.Count > 0) {
+            Car command = movementQueue.Dequeue();
+            SetWheelsSpeed(command.LeftWheel, command.RightWheel);
+            yield return new WaitForSeconds(command.Duration);
+        }
+        isExecuting = false;
     }
 
     void WheelEffects() {

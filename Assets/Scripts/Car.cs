@@ -9,15 +9,15 @@ namespace Assets.Script
 {
     public class Car
     {
-        public float Speed { get; set; }
-        public float Angle { get; set; }
+        public float RightWheel { get; set; }
+        public float LeftWheel { get; set; }
         public float Duration { get; set; }
 
-        public Car(float speed, float duration, float angle)
+        public Car(float RightWheel, float LeftWheel, float Duration)
         {
-            Speed = speed;
-            Duration = duration;
-            Angle = angle;
+            RightWheel = RightWheel;
+            Duration = Duration;
+            LeftWheel = LeftWheel;
         }
 
         public Car() { }
