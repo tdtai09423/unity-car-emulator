@@ -37,6 +37,11 @@ public class ArcadeCar: MonoBehaviour {
     public Transform sensorLeft;
     public Transform sensorCenter;
     public Transform sensorRight;
+    float axleLength ;
+
+    public RenderTexture leftCameraTexture;
+    public RenderTexture centerCameraTexture;
+    public RenderTexture rightCameraTexture;
 
     [DllImport("__Internal")]
     private static extern void NotifyLineSensor(string dataSensor);
@@ -92,9 +97,10 @@ public class ArcadeCar: MonoBehaviour {
 
         initialPosition = transform.position;
         initialRotation = transform.rotation;
-
+        axleLength = Vector3.Distance(wheels[WHEEL_LEFT_INDEX].wheelCollider.transform.position, wheels[WHEEL_RIGHT_INDEX].wheelCollider.transform.position)*10;
         carRb = GetComponent<Rigidbody>();
         carRb.centerOfMass = _centerOfMass;
+        Debug.Log(axleLength);
         /*wheels[WHEEL_FRONT_INDEX].wheelCollider.motorTorque = 0f;
         wheels[WHEEL_FRONT_INDEX].wheelCollider.brakeTorque = 0f;*/
        /* movementQueue.Enqueue(new Car(500f, 500f, 3f));
@@ -106,40 +112,49 @@ public class ArcadeCar: MonoBehaviour {
     }
 
     void Update() {
+        
+        //SetWheelSpeeds(42, 60);
     }
 
     void FixedUpdate() {
-        CheckSensors();
-        ProcessLineData(data, BasicSpeed);
+        CheckSensorsCamera();
+        //ProcessLineData(data, BasicSpeed);
 
-        float currentSpeed = carRb.velocity.magnitude;
+        /*  float currentSpeed = carRb.velocity.magnitude;
 
-        if (currentSpeed > maxSpeed)
-        {
-            carRb.velocity = carRb.velocity.normalized * maxSpeed;
-        }
+          if (currentSpeed > maxSpeed)
+          {
+              carRb.velocity = carRb.velocity.normalized * maxSpeed;
+          }
 
-        // In vận tốc ra console
-        Debug.Log("Vận tốc hiện tại của xe: " + currentSpeed + " m/s");
+          // In vận tốc ra console
+          Debug.Log("Vận tốc hiện tại của xe: " + currentSpeed + " m/s");*/
     }
 
     public void SetWheelSpeeds(float leftSpeed, float rightSpeed) {
         // Set the speed for the left wheel (wheel left index)
-        /*wheels[WHEEL_LEFT_INDEX].wheelCollider.motorTorque = leftSpeed;
-        wheels[WHEEL_RIGHT_INDEX].wheelCollider.motorTorque = rightSpeed;*/
-        /*wheels[WHEEL_LEFT_INDEX].wheelCollider.motorTorque = leftSpeed;
-        wheels[WHEEL_RIGHT_INDEX].wheelCollider.motorTorque = rightSpeed;*/
-        if(leftSpeed == 0 && rightSpeed == 0)
+        /*if (leftSpeed == 0 && rightSpeed == 0)
         {
             wheels[WHEEL_LEFT_INDEX].wheelCollider.brakeTorque = 1000f;
             wheels[WHEEL_RIGHT_INDEX].wheelCollider.brakeTorque = 1000f;
-        }else
+        }
+        else
         {
             wheels[WHEEL_LEFT_INDEX].wheelCollider.motorTorque = leftSpeed;
             wheels[WHEEL_RIGHT_INDEX].wheelCollider.motorTorque = rightSpeed;
             wheels[WHEEL_LEFT_INDEX].wheelCollider.brakeTorque = 0f;
             wheels[WHEEL_RIGHT_INDEX].wheelCollider.brakeTorque = 0f;
-        }
+        }*/
+
+        wheels[WHEEL_LEFT_INDEX].wheelCollider.motorTorque = 0f;
+        wheels[WHEEL_RIGHT_INDEX].wheelCollider.motorTorque = 0f;
+
+        Vector3 newVelocity = (transform.forward * (leftSpeed + rightSpeed) / 2) * 0.2f; // Tốc độ đích
+        carRb.velocity = new Vector3(newVelocity.x, carRb.velocity.y, newVelocity.z);
+
+        // Tạo mô-men xoắn quay xe
+        float angularVelocity = (leftSpeed - rightSpeed) / axleLength;
+        carRb.angularVelocity = new Vector3(0, angularVelocity, 0);
     }
 
     public void ResetCar()
@@ -281,6 +296,105 @@ public class ArcadeCar: MonoBehaviour {
 
         data = $"{dataLeft}{dataMid}{dataRight}";
         //Debug.Log(data);
+        //ProcessLineData(data, BasicSpeed);
+        //Debug.Log("Data: " + data);
+
+        InternalNotifyLineSensor(data);
+
+    }
+
+    private bool IsBlackLineDetected(RenderTexture cameraTexture)
+    {
+        // Tạo một Texture2D để sao chép dữ liệu từ RenderTexture
+        Texture2D tex = new Texture2D(cameraTexture.width, cameraTexture.height, TextureFormat.RGB24, false);
+
+        // Đặt RenderTexture.active để sao chép dữ liệu từ cameraTexture
+        RenderTexture.active = cameraTexture;
+        tex.ReadPixels(new Rect(0, 0, cameraTexture.width, cameraTexture.height), 0, 0);
+        tex.Apply();
+        RenderTexture.active = null;
+
+        int blackPixelCount = 0;
+        int totalPixels = tex.width * tex.height;
+
+        for (int y = 0; y < tex.height; y++)
+        {
+            for (int x = 0; x < tex.width; x++)
+            {
+                Color color = tex.GetPixel(x, y);
+                if (color.r < 0.1f && color.g < 0.1f && color.b < 0.1f)
+                {
+                    blackPixelCount++;
+                    if (blackPixelCount > 5)
+                    {
+                        RenderTexture.active = null;
+                        return true;
+                    }
+                }
+            }
+        }
+        RenderTexture.active = null;
+        return false;
+    }
+
+
+    private bool IsOnLine(RenderTexture cameraTexture)
+    {
+        // Tạo Texture2D với kích thước của RenderTexture
+        Texture2D tex = new Texture2D(cameraTexture.width, cameraTexture.height, TextureFormat.RGB24, false);
+
+        // Chuyển RenderTexture thành ảnh Texture2D
+        RenderTexture.active = cameraTexture;
+        tex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
+        tex.Apply();
+
+        int blackPixelCount = 0;
+        int totalPixels = tex.width * tex.height;
+
+        for (int y = 0; y < tex.height; y++)
+        {
+            for (int x = 0; x < tex.width; x++)
+            {
+                Color color = tex.GetPixel(x, y);
+                // Điều chỉnh ngưỡng màu đen để bắt được các pixel gần đen hơn
+                if (color.r < 0.3f && color.g < 0.3f && color.b < 0.3f)
+                {
+                    blackPixelCount++;
+                    if (blackPixelCount > 5)
+                    {
+                        RenderTexture.active = null;
+                        return true;
+                    }
+                }
+            }
+        }
+
+        RenderTexture.active = null;
+        return false;
+    }
+
+    private void CheckSensorsCamera()
+    {
+        Color targetColor = Color.black;
+        string dataLeft = "0", dataMid = "0", dataRight = "0";
+
+        if (IsOnLine(leftCameraTexture))
+        {
+            dataLeft = "1";
+        }
+
+        if (IsOnLine(centerCameraTexture))
+        {
+            dataMid = "1";
+        }
+
+        if (IsOnLine(rightCameraTexture))
+        {
+            dataRight = "1";
+        }
+
+        data = $"{dataLeft}{dataMid}{dataRight}";
+        Debug.Log(data);
         //ProcessLineData(data, BasicSpeed);
         //Debug.Log("Data: " + data);
 
